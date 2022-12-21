@@ -88,25 +88,23 @@ def train(data):
     p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
     winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
-    data_likelihood = jnp.mean(winner_win_prob_log)
-    return data_likelihood
+    return jnp.mean(winner_win_prob_log)
 
   elos = jnp.zeros([player_count])
   # print(model(elos))
-  steps = 100
+  steps = 20
   for i in range(steps):
-    lr = 22
+    lr = 20
     loss, grad = jax.value_and_grad(model)(elos)
     elos = elos + lr * grad
     if (i+1) % (steps//10) == 0:
-      print(pow(loss))
-  for elo, p in sorted(zip(elos, data['players'])):
-    print(p, elo)
-  print()
+      print(f'geo mean win prob: {pow(loss)}')
+  # for elo, p in sorted(zip(elos, data['players'])):
+  #   print(p, elo)
+  # print()
 
 def test_train():
   elos = [8.0, 2.0, 0.0]
-  # elos = [3.0, 2.0, 1.0]
   p1s = []
   p2s = []
   p1_win_probs = []
@@ -114,7 +112,7 @@ def test_train():
     for p2 in range(len(elos)):
       p1s.append(p1)
       p2s.append(p2)
-      p1_win_prob = pow(elos[p1]) / (pow(elos[p1]) + pow(elos[p2]))
+      p1_win_prob = win_prob(elos[p1], elos[p2])
       p1_win_probs.append(p1_win_prob)
       print(p1, p2, p1_win_prob)
   test_data = {
