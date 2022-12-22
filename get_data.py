@@ -1,15 +1,16 @@
 # OKRs
 # - O: ML fun/reseach - compare various model fit
-#   - KR: regularization added
-#   - KR: player variance added
-#   - KR: heavy tail fit added
+#   - Replace Pwin with weight
+#   - Add data
+#   - regularization added
+#   - player variance added
+#   - heavy tail fit added
 # - O: First IGLO presentation
-#   - KR: have season data
-#   - KR: All season data + last 3 seasons
-#   - KR: Short writup in markdown
-#   - KR: First table
-#   - KR:
-
+#   - have season data
+#   - All season data + last 3 seasons
+#   - Short writup in markdown
+#   - First table
+#   -
 import requests
 import jax.numpy as jnp
 import jax
