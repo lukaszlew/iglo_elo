@@ -1,3 +1,4 @@
+#
 import requests
 import jax.numpy as jnp
 import jax
@@ -92,16 +93,30 @@ def train(data):
 
   elos = jnp.zeros([player_count])
   # print(model(elos))
-  steps = 20
+  steps = 310
+  lr = 200
+  m_lr = 1.0
+
+  momentum = jnp.zeros_like(elos)
+  last_elos = jnp.zeros_like(elos)
+  last_eval = -1
+  last_grad = jnp.zeros_like(elos)
   for i in range(steps):
-    lr = 20
-    loss, grad = jax.value_and_grad(model)(elos)
-    elos = elos + lr * grad
-    if (i+1) % (steps//10) == 0:
-      print(f'geo mean win prob: {pow(loss)}')
-  # for elo, p in sorted(zip(elos, data['players'])):
-  #   print(p, elo)
-  # print()
+    eval, grad = jax.value_and_grad(model)(elos)
+    # if (i+1) % (steps//10) == 0:
+    print(f'Step {i:4}: eval: {pow(eval)}')
+    if eval < last_eval:
+      print(f'reset to {pow(last_eval)}')
+      momentum = jnp.zeros_like(elos)
+      elos, eval, grad = last_elos, last_eval, last_grad
+    else:
+      last_elos, last_eval, last_grad = elos, eval, grad
+    momentum = m_lr * momentum + grad
+    elos = elos + lr * momentum
+  # return
+  for elo, p in sorted(zip(elos, data['players'])):
+    print(p, elo)
+  print()
 
 def test_train():
   elos = [8.0, 2.0, 0.0]
