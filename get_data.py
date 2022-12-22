@@ -1,8 +1,5 @@
 # OKRs
 # - O: ML fun/reseach - compare various model fit
-#   - Replace Pwin with weight
-#   - Add data
-#   - regularization added
 #   - player variance added
 #   - heavy tail fit added
 # - O: First IGLO presentation
@@ -32,7 +29,7 @@ def get_data():
   seasons = []
   for season in request(f'seasons'):
     sn = season['number']
-    if sn < 16: continue
+    # if sn < 16: continue
     for group in request(f'seasons/{sn}/groups'):
       gn = group['name']
       # if group['name'] > 'B': continue
@@ -64,7 +61,7 @@ def get_data():
             p1_win_probs.append(1.0 if winner_id == p1_id else 0.0)
             p1s.append(players.index(p1_name))
             p2s.append(players.index(p2_name))
-            seasons.append(season)
+            seasons.append(sn)
   return {
     'players': players,
     'p1_win_probs': p1_win_probs,
@@ -105,7 +102,7 @@ def train(data, steps):
 
   # Optimize for these params:
   elos = jnp.zeros([player_count])
-  lr = 20  # learning rate.
+  lr = 300  # learning rate.
 
   if False:
     # Batch gradient descent algorithm.
@@ -161,18 +158,14 @@ def test_train():
 
 
 def train_iglo():
+  regularization = 0.1
   with open(iglo_json_path, 'r') as f:
     data = json.load(f)
 
   for i in range(len(data['p1_win_probs'])):
-    p = data['p1_win_probs'][i]
-    if p == 1.0:
-      data['p1_win_probs'][i] = 0.98
-    else:
-      assert p == 0.0
-      data['p1_win_probs'][i] = 0.02
+    data['p1_win_probs'][i] = (1-regularization) * data['p1_win_probs'][i] + regularization * 0.5
 
-  results = train(data, 600)
+  results = train(data, 200)
   results.reverse()
 
 
