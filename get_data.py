@@ -29,6 +29,7 @@ def get_data():
   p1_win_probs = []
   p1s = []
   p2s = []
+  seasons = []
   for season in request(f'seasons'):
     sn = season['number']
     if sn < 16: continue
@@ -56,18 +57,20 @@ def get_data():
             continue
           assert winner_id is None or (winner_id == p1_id) or (winner_id == p2_id), (winner_id, p1_id, p2_id)
           if winner_id is not None:
-            p1_win_probs.append(1.0 if winner_id == p1_id else 0.0)
             assert p1_id in id_to_player.keys()
             assert p2_id in id_to_player.keys()
             p1_name = id_to_player[p1_id]
             p2_name = id_to_player[p2_id]
+            p1_win_probs.append(1.0 if winner_id == p1_id else 0.0)
             p1s.append(players.index(p1_name))
             p2s.append(players.index(p2_name))
+            seasons.append(season)
   return {
     'players': players,
     'p1_win_probs': p1_win_probs,
     'p1s': p1s,
     'p2s': p2s,
+    'seasons': seasons,
   }
 
 iglo_json_path = '/tmp/iglo.json'
@@ -160,4 +163,19 @@ def test_train():
 def train_iglo():
   with open(iglo_json_path, 'r') as f:
     data = json.load(f)
-  train(data, 310)
+
+  for i in range(len(data['p1_win_probs'])):
+    p = data['p1_win_probs'][i]
+    if p == 1.0:
+      data['p1_win_probs'][i] = 0.98
+    else:
+      assert p == 0.0
+      data['p1_win_probs'][i] = 0.02
+
+  results = train(data, 600)
+  results.reverse()
+
+
+  for elo, p in results:
+    print(f'{p:30}: {elo+100: 2.2f}')
+  print()
