@@ -84,10 +84,8 @@ def log(x):
 def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
 
-def train(data):
+def train(data, steps):
   player_count = len(data['players'])
-  # print(data['players'])
-  # print(player_count)
   p1_win_probs = jnp.array(data['p1_win_probs'])
   p2_win_probs = 1.0 - p1_win_probs
   p1s = jnp.array(data['p1s'])
@@ -96,38 +94,41 @@ def train(data):
   def model(elos):
     p1_elos = jnp.take(elos, p1s)
     p2_elos = jnp.take(elos, p2s)
-    # print(p1_elos, p1s, elos)
     p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
     winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
     return jnp.mean(winner_win_prob_log)
 
+  # Optimize for these params:
   elos = jnp.zeros([player_count])
-  # print(model(elos))
-  steps = 310
-  lr = 200
-  m_lr = 1.0
+  lr = 20  # learning rate.
 
-  momentum = jnp.zeros_like(elos)
-  last_elos = jnp.zeros_like(elos)
-  last_eval = -1
-  last_grad = jnp.zeros_like(elos)
-  for i in range(steps):
-    eval, grad = jax.value_and_grad(model)(elos)
-    # if (i+1) % (steps//10) == 0:
-    print(f'Step {i:4}: eval: {pow(eval)}')
-    if eval < last_eval:
-      print(f'reset to {pow(last_eval)}')
-      momentum = jnp.zeros_like(elos)
-      elos, eval, grad = last_elos, last_eval, last_grad
-    else:
-      last_elos, last_eval, last_grad = elos, eval, grad
-    momentum = m_lr * momentum + grad
-    elos = elos + lr * momentum
-  # return
-  for elo, p in sorted(zip(elos, data['players'])):
-    print(p, elo)
-  print()
+  if False:
+    # Batch gradient descent algorithm.
+    for i in range(steps):
+      eval, grad = jax.value_and_grad(model)(elos)
+      print(f'Step {i:4}: eval: {pow(eval)}')
+      elos = elos + lr * grad
+  else:
+    # Momentum gradient descent with restarts
+    m_lr = 1.0
+    momentum = jnp.zeros_like(elos)
+    last_elos = jnp.zeros_like(elos)
+    last_eval = -1
+    last_grad = jnp.zeros_like(elos)
+    for i in range(steps):
+      eval, grad = jax.value_and_grad(model)(elos)
+      print(f'Step {i:4}: eval: {pow(eval)}')
+      if eval < last_eval:
+        print(f'reset to {pow(last_eval)}')
+        momentum = jnp.zeros_like(elos)
+        elos, eval, grad = last_elos, last_eval, last_grad
+      else:
+        last_elos, last_eval, last_grad = elos, eval, grad
+      momentum = m_lr * momentum + grad
+      elos = elos + lr * momentum
+  return sorted(zip(elos, data['players']))
+
 
 def test_train():
   elos = [8.0, 2.0, 0.0]
@@ -148,9 +149,14 @@ def test_train():
     'p1_win_probs': p1_win_probs,
   }
 
-  train(test_data)
+  results = train(test_data, 30)
+
+  for elo, p in results:
+    print(p, elo - results[0][0])
+  print()
+
 
 def train_iglo():
   with open(iglo_json_path, 'r') as f:
     data = json.load(f)
-  train(data)
+  train(data, 310)
