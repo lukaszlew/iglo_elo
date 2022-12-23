@@ -92,6 +92,7 @@ def log(x):
 
 def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
+  # return 1.0 / (1.0 + pow(p2_elo-p1_elo))
 
 
 def train(
@@ -108,10 +109,12 @@ def train(
 
   def model(params):
     elos = params['elos']
-    # cons = params['consistency']
+    cons = params['consistency']
     p1_elos = jnp.take(elos, p1s)
     p2_elos = jnp.take(elos, p2s)
-
+    p1_cons = jnp.take(cons, p1s)
+    p2_cons = jnp.take(cons, p2s)
+    cons = (p1_cons + p2_cons) / 2
     # p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     # p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
     # winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
@@ -123,15 +126,15 @@ def train(
   # Optimize for these params:
   params = {
     'elos': jnp.zeros([player_count]),
-    'consistency': jnp.ones([player_count]),
+    'consistency': jnp.zeros([player_count]),
   }
 
   if False:
     # Batch gradient descent algorithm.
     for i in range(steps):
-      eval, grad = jax.value_and_grad(model, argnums=(0,1))(elos, consistency)
+      eval, grad = jax.value_and_grad(model)(params)
       if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
-      elos = elos + learning_rate * grad
+      params = tree_map(lambda p, g: p + learning_rate * g, params, grad)
   else:
     # Momentum gradient descent with restarts
     m_lr = 1.0
@@ -152,6 +155,10 @@ def train(
         last_params, last_eval, last_grad = params, eval, grad
       momentum = tree_map(lambda m, g: m_lr * m + g, momentum, grad)
       params = tree_map(lambda p, m: p + learning_rate * m, params, momentum)
+      # params['consistency'] = jnp.zeros_like(params['consistency'])
+      # params['consistency'] -= jnp.mean(params['consistency'])
+      # params['consistency'] /= 2
+      # params['consistency'] = jnp.ones_like(params['consistency'])
   return params, pow(last_eval)
 
 
@@ -190,13 +197,12 @@ def train_iglo():
     data['p1_win_probs'][i] = (1-regularization) * data['p1_win_probs'][i] + regularization * 0.5
 
   params, eval = train(data, steps=500, learning_rate=30, do_log=True)
-  elos = params['elos']
-  results = sorted(zip(elos, data['players']))
+  results = sorted(zip(params['elos'], data['players'], params['consistency']))
   results.reverse()
 
 
-  for elo, p in results:
-    print(f'{p:30}: {elo*100+2000: 2.2f}')
+  for elo, p, c in results:
+    print(f'{p:30}: {elo*100+2000: 8.2f}  cons={jnp.exp(c)*100.0: 8.2f}')
   expected_eval = 0.5758971571922302
   print(f'Model fit: {eval} Diff={eval-expected_eval}')
 
