@@ -84,6 +84,7 @@ def log(x):
 def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
 
+
 def train(
   data,
   steps,
@@ -99,9 +100,13 @@ def train(
   def model(elos, conf):
     p1_elos = jnp.take(elos, p1s)
     p2_elos = jnp.take(elos, p2s)
-    p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
-    p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
-    winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
+
+    # p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
+    # p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
+    # winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
+
+    winner_win_prob_log = p1_win_probs * p1_elos + p2_win_probs * p2_elos - log(pow(p1_elos) + pow(p2_elos))
+
     return jnp.mean(winner_win_prob_log)
 
   # Optimize for these params:
@@ -127,6 +132,7 @@ def train(
       if eval < last_eval:
         if do_log: print(f'reset to {pow(last_eval)}')
         momentum = jnp.zeros_like(elos)
+        # momentum /= 2.
         elos, eval, grad = last_elos, last_eval, last_grad
       else:
         last_elos, last_eval, last_grad = elos, eval, grad
@@ -169,7 +175,7 @@ def train_iglo():
   for i in range(len(data['p1_win_probs'])):
     data['p1_win_probs'][i] = (1-regularization) * data['p1_win_probs'][i] + regularization * 0.5
 
-  elos, eval = train(data, steps=400, learning_rate=30)
+  elos, eval = train(data, steps=500, learning_rate=30, do_log=True)
   results = sorted(zip(elos, data['players']))
   results.reverse()
 
