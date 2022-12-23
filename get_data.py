@@ -10,15 +10,19 @@
 import requests
 import jax.numpy as jnp
 import jax
+from jax.tree_util import tree_map
 import json
 import numpy as np
 # import aiohttp
 
+
 url = 'https://iglo.szalenisamuraje.org/api'
+
 
 def request(s):
   print(f'getting {s}')
   return requests.get(f'{url}/{s}').json()['results']
+
 
 def get_data():
   players = []
@@ -69,17 +73,22 @@ def get_data():
     'seasons': seasons,
   }
 
+
 iglo_json_path = '/tmp/iglo.json'
+
 
 def save_iglo_data():
   with open(iglo_json_path, 'w') as f:
     json.dump(get_data(), f)
 
+
 def pow(x):
   return jnp.exp(np.log(2) * x)
 
+
 def log(x):
   return jnp.log(x) / np.log(2)
+
 
 def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
@@ -97,7 +106,9 @@ def train(
   p1s = jnp.array(data['p1s'])
   p2s = jnp.array(data['p2s'])
 
-  def model(elos, conf):
+  def model(params):
+    elos = params['elos']
+    # cons = params['consistency']
     p1_elos = jnp.take(elos, p1s)
     p2_elos = jnp.take(elos, p2s)
 
@@ -110,35 +121,38 @@ def train(
     return jnp.mean(winner_win_prob_log)
 
   # Optimize for these params:
-  elos = jnp.zeros([player_count])
-  confs = jnp.ones([player_count])
+  params = {
+    'elos': jnp.zeros([player_count]),
+    'consistency': jnp.ones([player_count]),
+  }
 
   if False:
     # Batch gradient descent algorithm.
     for i in range(steps):
-      eval, grad = jax.value_and_grad(model, argnums=(0,1))(elos, confs)
+      eval, grad = jax.value_and_grad(model, argnums=(0,1))(elos, consistency)
       if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
       elos = elos + learning_rate * grad
   else:
     # Momentum gradient descent with restarts
     m_lr = 1.0
-    momentum = jnp.zeros_like(elos)
-    last_elos = jnp.zeros_like(elos)
+    momentum = tree_map(jnp.zeros_like, params)
+    last_params = params
     last_eval = -1
-    last_grad = jnp.zeros_like(elos)
+    last_grad = tree_map(jnp.zeros_like, params)
+
     for i in range(steps):
-      eval, grad = jax.value_and_grad(model, argnums=(0,1))(elos, confs)
+      eval, grad = jax.value_and_grad(model)(params)
       if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
       if eval < last_eval:
         if do_log: print(f'reset to {pow(last_eval)}')
-        momentum = jnp.zeros_like(elos)
+        momentum = tree_map(jnp.zeros_like, params)
         # momentum /= 2.
-        elos, eval, grad = last_elos, last_eval, last_grad
+        params, eval, grad = last_params, last_eval, last_grad
       else:
-        last_elos, last_eval, last_grad = elos, eval, grad
-      momentum = m_lr * momentum + grad[0]
-      elos = elos + learning_rate * momentum
-  return elos, pow(last_eval)
+        last_params, last_eval, last_grad = params, eval, grad
+      momentum = tree_map(lambda m, g: m_lr * m + g, momentum, grad)
+      params = tree_map(lambda p, m: p + learning_rate * m, params, momentum)
+  return params, pow(last_eval)
 
 
 def test_train():
@@ -161,8 +175,8 @@ def test_train():
   }
 
   results, _ = train(test_data, 30)
-  results = results - jnp.min(results)
-  err = jnp.linalg.norm(results - jnp.array(elos))
+  results['elos'] = results['elos'] - jnp.min(results['elos'])
+  err = jnp.linalg.norm(results['elos'] - jnp.array(elos))
   assert err < 0.02, f'FAIL err={err:.2f}; results={results}'
   print('PASS')
 
@@ -175,7 +189,8 @@ def train_iglo():
   for i in range(len(data['p1_win_probs'])):
     data['p1_win_probs'][i] = (1-regularization) * data['p1_win_probs'][i] + regularization * 0.5
 
-  elos, eval = train(data, steps=500, learning_rate=30, do_log=True)
+  params, eval = train(data, steps=500, learning_rate=30, do_log=True)
+  elos = params['elos']
   results = sorted(zip(elos, data['players']))
   results.reverse()
 
