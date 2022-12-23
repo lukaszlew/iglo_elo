@@ -89,6 +89,8 @@ def pow(x):
 def log(x):
   return jnp.log(x) / np.log(2)
 
+def log1pow(x):
+  return -log(1.0 + pow(x))
 
 def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
@@ -114,12 +116,14 @@ def train(
     p2_elos = jnp.take(elos, p2s)
     p1_cons = jnp.take(cons, p1s)
     p2_cons = jnp.take(cons, p2s)
-    cons = (p1_cons + p2_cons) / 2
+    cons = jnp.exp((p1_cons + p2_cons) / 2)
     # p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     # p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
     # winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
 
-    winner_win_prob_log = p1_win_probs * p1_elos + p2_win_probs * p2_elos - log(pow(p1_elos) + pow(p2_elos))
+    diff = (p2_elos-p1_elos)
+    # diff = (p2_elos-p1_elos) / cons
+    winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
 
     return jnp.mean(winner_win_prob_log)
 
