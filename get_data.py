@@ -96,7 +96,7 @@ def train(
   p1s = jnp.array(data['p1s'])
   p2s = jnp.array(data['p2s'])
 
-  def model(elos):
+  def model(elos, conf):
     p1_elos = jnp.take(elos, p1s)
     p2_elos = jnp.take(elos, p2s)
     p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
@@ -106,11 +106,12 @@ def train(
 
   # Optimize for these params:
   elos = jnp.zeros([player_count])
+  confs = jnp.ones([player_count])
 
   if False:
     # Batch gradient descent algorithm.
     for i in range(steps):
-      eval, grad = jax.value_and_grad(model)(elos)
+      eval, grad = jax.value_and_grad(model, argnums=(0,1))(elos, confs)
       if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
       elos = elos + learning_rate * grad
   else:
@@ -121,7 +122,7 @@ def train(
     last_eval = -1
     last_grad = jnp.zeros_like(elos)
     for i in range(steps):
-      eval, grad = jax.value_and_grad(model)(elos)
+      eval, grad = jax.value_and_grad(model, argnums=(0,1))(elos, confs)
       if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
       if eval < last_eval:
         if do_log: print(f'reset to {pow(last_eval)}')
@@ -129,7 +130,7 @@ def train(
         elos, eval, grad = last_elos, last_eval, last_grad
       else:
         last_elos, last_eval, last_grad = elos, eval, grad
-      momentum = m_lr * momentum + grad
+      momentum = m_lr * momentum + grad[0]
       elos = elos + learning_rate * momentum
   return elos, pow(last_eval)
 
@@ -175,7 +176,8 @@ def train_iglo():
 
   for elo, p in results:
     print(f'{p:30}: {elo*100+2000: 2.2f}')
-  print(f'Model fit: {eval} Diff={eval-0.575806736946106}')
+  expected_eval = 0.5758971571922302
+  print(f'Model fit: {eval} Diff={eval-expected_eval}')
 
 def main():
   test_train()
