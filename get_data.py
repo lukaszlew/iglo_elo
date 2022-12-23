@@ -1,13 +1,12 @@
-# OKRs
-# - O: ML fun/reseach - compare various model fit
-#   - player variance added
-#   - heavy tail fit added
-# - O: First IGLO presentation
-#   - have season data
-#   - All season data + last 3 seasons
+# ToDo:
+# - player variance added
+# - heavy tail fit added
+# - per season gaussian process
+# - Plan how to present
+#   - present partial first.
 #   - Short writup in markdown
-#   - First table
-#   -
+#   - plot
+
 import requests
 import jax.numpy as jnp
 import jax
@@ -85,7 +84,12 @@ def log(x):
 def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
 
-def train(data, steps):
+def train(
+  data,
+  steps,
+  do_log=False,
+  learning_rate=30,
+):
   player_count = len(data['players'])
   p1_win_probs = jnp.array(data['p1_win_probs'])
   p2_win_probs = 1.0 - p1_win_probs
@@ -102,14 +106,13 @@ def train(data, steps):
 
   # Optimize for these params:
   elos = jnp.zeros([player_count])
-  lr = 300  # learning rate.
 
   if False:
     # Batch gradient descent algorithm.
     for i in range(steps):
       eval, grad = jax.value_and_grad(model)(elos)
-      print(f'Step {i:4}: eval: {pow(eval)}')
-      elos = elos + lr * grad
+      if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
+      elos = elos + learning_rate * grad
   else:
     # Momentum gradient descent with restarts
     m_lr = 1.0
@@ -119,16 +122,16 @@ def train(data, steps):
     last_grad = jnp.zeros_like(elos)
     for i in range(steps):
       eval, grad = jax.value_and_grad(model)(elos)
-      print(f'Step {i:4}: eval: {pow(eval)}')
+      if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
       if eval < last_eval:
-        print(f'reset to {pow(last_eval)}')
+        if do_log: print(f'reset to {pow(last_eval)}')
         momentum = jnp.zeros_like(elos)
         elos, eval, grad = last_elos, last_eval, last_grad
       else:
         last_elos, last_eval, last_grad = elos, eval, grad
       momentum = m_lr * momentum + grad
-      elos = elos + lr * momentum
-  return sorted(zip(elos, data['players']))
+      elos = elos + learning_rate * momentum
+  return elos, pow(last_eval)
 
 
 def test_train():
@@ -142,7 +145,7 @@ def test_train():
       p2s.append(p2)
       p1_win_prob = win_prob(elos[p1], elos[p2])
       p1_win_probs.append(p1_win_prob)
-      print(p1, p2, p1_win_prob)
+      # print(p1, p2, p1_win_prob)
   test_data = {
     'players': { pi: f'elo{elos[pi]}' for pi in range(len(elos)) },
     'p1s': p1s,
@@ -150,11 +153,11 @@ def test_train():
     'p1_win_probs': p1_win_probs,
   }
 
-  results = train(test_data, 30)
-
-  for elo, p in results:
-    print(p, elo - results[0][0])
-  print()
+  results, _ = train(test_data, 30)
+  results = results - jnp.min(results)
+  err = jnp.linalg.norm(results - jnp.array(elos))
+  assert err < 0.02, f'FAIL err={err:.2f}; results={results}'
+  print('PASS')
 
 
 def train_iglo():
@@ -165,10 +168,15 @@ def train_iglo():
   for i in range(len(data['p1_win_probs'])):
     data['p1_win_probs'][i] = (1-regularization) * data['p1_win_probs'][i] + regularization * 0.5
 
-  results = train(data, 200)
+  elos, eval = train(data, steps=400, learning_rate=30)
+  results = sorted(zip(elos, data['players']))
   results.reverse()
 
 
   for elo, p in results:
-    print(f'{p:30}: {elo+100: 2.2f}')
-  print()
+    print(f'{p:30}: {elo*100+2000: 2.2f}')
+  print(f'Model fit: {eval} Diff={eval-0.575806736946106}')
+
+def main():
+  test_train()
+  train_iglo()
