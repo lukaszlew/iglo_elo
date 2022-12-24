@@ -116,16 +116,17 @@ def train(
     p2_elos = jnp.take(elos, p2s)
     p1_cons = jnp.take(cons, p1s)
     p2_cons = jnp.take(cons, p2s)
-    cons = jnp.exp((p1_cons + p2_cons) / 2)
+    cons2 = jnp.exp((p1_cons + p2_cons) / 2)
     # p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     # p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
     # winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
 
     diff = (p2_elos-p1_elos)
-    # diff = (p2_elos-p1_elos) / cons
+    # diff = (p2_elos-p1_elos) / cons2
     winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
 
     return jnp.mean(winner_win_prob_log)
+    # return jnp.mean(winner_win_prob_log) - 0.05*jnp.mean(cons ** 2)
 
   # Optimize for these params:
   params = {
