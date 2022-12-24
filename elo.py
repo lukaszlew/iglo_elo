@@ -111,22 +111,25 @@ def train(
 
   def model(params):
     elos = params['elos']
-    cons = params['consistency']
     p1_elos = jnp.take(elos, p1s)
     p2_elos = jnp.take(elos, p2s)
-    p1_cons = jnp.take(cons, p1s)
-    p2_cons = jnp.take(cons, p2s)
-    cons2 = jnp.exp((p1_cons + p2_cons) / 2)
+
     # p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     # p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
     # winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
 
     diff = (p2_elos-p1_elos)
-    # diff = (p2_elos-p1_elos) / cons2
     winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
-
     return jnp.mean(winner_win_prob_log)
-    # return jnp.mean(winner_win_prob_log) - 0.05*jnp.mean(cons ** 2)
+
+    # cons = params['consistency']
+    # p1_cons = jnp.take(cons, p1s)
+    # p2_cons = jnp.take(cons, p2s)
+    # winner_win_prob_log = 0.0
+    # winner_win_prob_log += p1_win_probs * log1pow(diff/jnp.exp(p1_cons)) + p2_win_probs * log1pow(-diff/jnp.exp(p1_cons))
+    # winner_win_prob_log += p1_win_probs * log1pow(diff/jnp.exp(p2_cons)) + p2_win_probs * log1pow(-diff/jnp.exp(p2_cons))
+    # winner_win_prob_log /= 2
+    # return jnp.mean(winner_win_prob_log) - 0.005*jnp.mean(cons ** 2)
 
   # Optimize for these params:
   params = {
@@ -208,7 +211,7 @@ def train_iglo():
 
   for elo, p, c in results:
     print(f'{p:30}: {elo*100+2000: 8.2f}  cons={jnp.exp(c)*100.0: 8.2f}')
-  expected_eval = 0.5758971571922302
+  expected_eval = 0.5758981704711914
   print(f'Model fit: {eval} Diff={eval-expected_eval}')
 
 def main():
