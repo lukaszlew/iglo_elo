@@ -15,6 +15,9 @@ import json
 import numpy as np
 # import aiohttp
 
+from jax.config import config
+config.update("jax_numpy_rank_promotion", "raise")
+
 
 url = 'https://iglo.szalenisamuraje.org/api'
 
@@ -96,6 +99,8 @@ def win_prob(p1_elo, p2_elo):
   return pow(p1_elo) / (pow(p1_elo) + pow(p2_elo))
   # return 1.0 / (1.0 + pow(p2_elo-p1_elo))
 
+# momentum restarting - we can do a mapping between loss component and parameter subspace
+# restart only the subspace when the component increases
 
 def train(
   data,
@@ -107,12 +112,23 @@ def train(
   p1_win_probs = jnp.array(data['p1_win_probs'])
   p2_win_probs = 1.0 - p1_win_probs
   p1s = jnp.array(data['p1s'])
-  p2s = jnp.array(data['p2s'])
+  p2s = jnp.array(data['p2s']) # TODO array befor train
+  seasons = jnp.array(data['seasons'])
+
+  (data_size,) = p1s.shape
+  assert seasons.shape == (data_size,)
+  assert p1s.shape == (data_size,)
+  assert p2s.shape == (data_size,)
+  assert p1_win_probs.shape == (data_size,)
 
   def model(params):
     elos = params['elos']
-    p1_elos = jnp.take(elos, p1s)
-    p2_elos = jnp.take(elos, p2s)
+    assert elos.shape == (player_count, season_count)
+    p1_elos = elos[p1s, seasons]
+    p2_elos = elos[p2s, seasons]
+
+    assert p1_elos.shape == (data_size,)
+    assert p2_elos.shape == (data_size,)
 
     # p1_win_prob_log = log(win_prob(p1_elos, p2_elos))
     # p2_win_prob_log = log(win_prob(p2_elos, p1_elos))
@@ -132,11 +148,11 @@ def train(
     # return jnp.mean(winner_win_prob_log) - 0.005*jnp.mean(cons ** 2)
 
   # Optimize for these params:
+  season_count = jnp.max(seasons) + 1
   params = {
-    'elos': jnp.zeros([player_count]),
-    'consistency': jnp.zeros([player_count]),
+    'elos': jnp.zeros([player_count, season_count]),
+    'consistency': jnp.zeros([player_count, season_count]),
   }
-
   if False:
     # Batch gradient descent algorithm.
     for i in range(steps):
@@ -167,30 +183,34 @@ def train(
       # params['consistency'] -= jnp.mean(params['consistency'])
       # params['consistency'] /= 2
       # params['consistency'] = jnp.ones_like(params['consistency'])
-  return params, pow(last_eval)
+  return params, pow(eval)
 
 
-def test_train():
-  elos = [8.0, 2.0, 0.0]
+def test1(do_log=False):
+  elos = [[8.0, 4.0], [2.0, 2.0], [0.0, 0.0],]
   p1s = []
   p2s = []
   p1_win_probs = []
+  seasons = []
   for p1 in range(len(elos)):
     for p2 in range(len(elos)):
-      p1s.append(p1)
-      p2s.append(p2)
-      p1_win_prob = win_prob(elos[p1], elos[p2])
-      p1_win_probs.append(p1_win_prob)
-      # print(p1, p2, p1_win_prob)
+      for season in range(2):
+        p1s.append(p1)
+        p2s.append(p2)
+        p1_win_prob = win_prob(elos[p1][season], elos[p2][season])
+        p1_win_probs.append(p1_win_prob)
+        seasons.append(season)
+        # print(p1, p2, p1_win_prob)
   test_data = {
     'players': { pi: f'elo{elos[pi]}' for pi in range(len(elos)) },
     'p1s': p1s,
     'p2s': p2s,
     'p1_win_probs': p1_win_probs,
+    'seasons': seasons,
   }
 
-  results, _ = train(test_data, 30)
-  results['elos'] = results['elos'] - jnp.min(results['elos'])
+  results, _ = train(test_data, 30, do_log=do_log)
+  results['elos'] = results['elos'] - jnp.min(results['elos'], axis=0, keepdims=True)
   err = jnp.linalg.norm(results['elos'] - jnp.array(elos))
   assert err < 0.02, f'FAIL err={err:.2f}; results={results}'
   print('PASS')
