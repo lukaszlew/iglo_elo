@@ -1,11 +1,14 @@
 # ToDo:
-# - player variance added
-# - heavy tail fit added
 # - per season gaussian process
+# - plot
+# - heavy tail fit added
 # - Plan how to present
 #   - present partial first.
 #   - Short writup in markdown
 #   - plot
+# Later:
+# - player variance - not clear how it works
+# - rank confidence - not clear what equations
 
 import requests
 import jax.numpy as jnp
@@ -108,12 +111,11 @@ def train(
   do_log=False,
   learning_rate=30,
 ):
-  player_count = len(data['players'])
-  p1_win_probs = jnp.array(data['p1_win_probs'])
+  p1_win_probs = data['p1_win_probs']
   p2_win_probs = 1.0 - p1_win_probs
-  p1s = jnp.array(data['p1s'])
-  p2s = jnp.array(data['p2s']) # TODO array befor train
-  seasons = jnp.array(data['seasons'])
+  p1s = data['p1s']
+  p2s = data['p2s']
+  seasons = data['seasons']
 
   (data_size,) = p1s.shape
   assert seasons.shape == (data_size,)
@@ -148,6 +150,7 @@ def train(
     # return jnp.mean(winner_win_prob_log) - 0.005*jnp.mean(cons ** 2)
 
   # Optimize for these params:
+  player_count = jnp.maximum(jnp.max(p1s), jnp.max(p2s)) + 1
   season_count = jnp.max(seasons) + 1
   params = {
     'elos': jnp.zeros([player_count, season_count]),
@@ -187,7 +190,7 @@ def train(
 
 
 def test1(do_log=False):
-  elos = [[8.0, 4.0], [2.0, 2.0], [0.0, 0.0],]
+  elos = jnp.array([[8.0, 4.0], [2.0, 3.0], [0.0, 0.0],])
   p1s = []
   p2s = []
   p1_win_probs = []
@@ -201,14 +204,14 @@ def test1(do_log=False):
         p1_win_probs.append(p1_win_prob)
         seasons.append(season)
         # print(p1, p2, p1_win_prob)
-  test_data = {
-    'players': { pi: f'elo{elos[pi]}' for pi in range(len(elos)) },
-    'p1s': p1s,
-    'p2s': p2s,
-    'p1_win_probs': p1_win_probs,
-    'seasons': seasons,
-  }
+  # players = { pi: f'elo{elos[pi]}' for pi in range(len(elos)) }
 
+  test_data = {
+    'p1s': jnp.array(p1s),
+    'p2s': jnp.array(p2s),
+    'p1_win_probs': jnp.array(p1_win_probs),
+    'seasons': jnp.array(seasons),
+  }
   results, _ = train(test_data, 30, do_log=do_log)
   results['elos'] = results['elos'] - jnp.min(results['elos'], axis=0, keepdims=True)
   err = jnp.linalg.norm(results['elos'] - jnp.array(elos))
@@ -216,13 +219,20 @@ def test1(do_log=False):
   print('PASS')
 
 
-def train_iglo():
+def iglo():
   regularization = 0.1
   with open(iglo_json_path, 'r') as f:
     data = json.load(f)
 
-  for i in range(len(data['p1_win_probs'])):
-    data['p1_win_probs'][i] = (1-regularization) * data['p1_win_probs'][i] + regularization * 0.5
+  data = {
+    'p1s': jnp.array(data['p1s']),
+    'p2s': jnp.array(data['p2s']),
+    'p1_win_probs': jnp.array(data['p1_win_probs']),
+    'seasons': jnp.array(data['seasons']),
+  }
+
+
+  data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
   params, eval = train(data, steps=500, learning_rate=30, do_log=True)
   results = sorted(zip(params['elos'], data['players'], params['consistency']))
@@ -236,4 +246,3 @@ def train_iglo():
 
 def main():
   test_train()
-  train_iglo()
