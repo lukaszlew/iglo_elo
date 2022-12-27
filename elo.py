@@ -20,6 +20,7 @@ import numpy as np
 
 from jax.config import config
 config.update("jax_numpy_rank_promotion", "raise")
+config.update("jax_enable_x64", True)
 
 
 url = 'https://iglo.szalenisamuraje.org/api'
@@ -118,7 +119,7 @@ def train(
   steps,
   do_log=False,
   learning_rate=10000,
-  elo_stability=0.1,
+  elo_stability=0.5,
 ):
   p1_win_probs = data['p1_win_probs']
   p2_win_probs = 1.0 - p1_win_probs
@@ -154,7 +155,8 @@ def train(
     diff = (p2_elos-p1_elos)
     winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
     elo_divergence = jnp.mean((delos[:, 1:] - delos[:, :-1])**2)
-    return jnp.mean(winner_win_prob_log) - elo_stability * elo_divergence
+    eval = jnp.mean(winner_win_prob_log)
+    return eval - elo_stability * elo_divergence
 
     # return jnp.mean(winner_win_prob_log) - 0.01*jnp.mean(delos**2)
     # delos = jnp.mean((elos[:,1:] - elos[:, :-1]) ** 2)
@@ -171,8 +173,8 @@ def train(
 
   # Optimize for these params:
   params = {
-    'elos': jnp.zeros([player_count, season_count]),
-    'elo_diff': jnp.zeros([player_count, season_count]),
+    'elos': jnp.zeros([player_count, season_count], dtype=jnp.float64),
+    'elo_diff': jnp.zeros([player_count, season_count], dtype=jnp.float64),
     # 'consistency': jnp.zeros([player_count, season_count]),
   }
 
@@ -183,11 +185,16 @@ def train(
   last_params = params
   last_eval = -1
   last_grad = tree_map(jnp.zeros_like, params)
-  just_reset = False
+  last_reset_step = 0
 
+  print(params['elos'].dtype)
   for i in range(steps):
     eval, grad = jax.value_and_grad(model)(params)
-    if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
+    if do_log:
+      elos = grad['elos']
+      q=jnp.sum(params['elos'] == last_params['elos'])
+      print(f'Step {i:4}: eval: {pow(eval)} lr={lr:7} grad={jnp.linalg.norm(elos)} {q}')
+      # print(eval - last_eval)
     # lr = learning_rate * (steps-i) / steps
     # lr = learning_rate / jnp.sqrt(i+1)
     # lr = learning_rate / (i+1)
@@ -196,15 +203,17 @@ def train(
       params = tree_map(lambda p, g: p + lr * g, params, grad)
     else:
       if eval < last_eval:
-        if do_log: print(f'reset to {pow(last_eval)} halve_lr={just_reset} {lr}')
-        if just_reset:
-          lr /= 1.9
-        just_reset = True
+        if do_log: print(f'reset to {pow(last_eval)}')
+        lr /= 1.5
+        if last_reset_step == i-1:
+          lr /= 4
+        last_reset_step = i
         momentum = tree_map(jnp.zeros_like, params)
         # momentum /= 2.
         params, eval, grad = last_params, last_eval, last_grad
       else:
-        just_reset = False
+        if (i - last_reset_step) % 12  == 0:
+          lr *= 1.5
         last_params, last_eval, last_grad = params, eval, grad
       momentum = tree_map(lambda m, g: m_lr * m + g, momentum, grad)
       params = tree_map(lambda p, m: p + lr * m, params, momentum)
@@ -260,12 +269,14 @@ def iglo(do_log=True, steps=650, lr=30, path='/tmp/iglo.json'):
   # print(set(data['win_types']))
   # return
 
+  selector = np.array(data['win_types']) != 'not_played'
+
   players = data['players']
   data = {
-    'p1s': jnp.array(data['p1s']),
-    'p2s': jnp.array(data['p2s']),
-    'p1_win_probs': jnp.array(data['p1_win_probs']),
-    'seasons': jnp.array(data['seasons']),
+    'p1s': jnp.array(data['p1s'])[selector],
+    'p2s': jnp.array(data['p2s'])[selector],
+    'p1_win_probs': jnp.array(data['p1_win_probs'])[selector],
+    'seasons': jnp.array(data['seasons'])[selector],
   }
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
@@ -290,8 +301,9 @@ def iglo(do_log=True, steps=650, lr=30, path='/tmp/iglo.json'):
       # print(f'{delos[s]*100+2000: 6.0f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
     print()
 
-  expected_eval = 0.5758981704711914
-  print(f'Model fit: {eval} Diff={eval-expected_eval}')
+  # expected_eval = 0.5758981704711914
+  expected_eval = 0.6161791524954028
+  print(f'Model fit: {eval} improvement={eval-expected_eval}')
 
 def main():
   test_train()
