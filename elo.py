@@ -117,6 +117,9 @@ def train(
   p2s = data['p2s']
   seasons = data['seasons']
 
+  player_count = jnp.maximum(jnp.max(p1s), jnp.max(p2s)) + 1
+  season_count = jnp.max(seasons) + 1
+
   (data_size,) = p1s.shape
   assert seasons.shape == (data_size,)
   assert p1s.shape == (data_size,)
@@ -139,6 +142,8 @@ def train(
     diff = (p2_elos-p1_elos)
     winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
     return jnp.mean(winner_win_prob_log)
+    # delos = jnp.mean((elos[:,1:] - elos[:, :-1]) ** 2)
+    # return jnp.mean(winner_win_prob_log) - 1.1 * delos
 
     # cons = params['consistency']
     # p1_cons = jnp.take(cons, p1s)
@@ -150,11 +155,9 @@ def train(
     # return jnp.mean(winner_win_prob_log) - 0.005*jnp.mean(cons ** 2)
 
   # Optimize for these params:
-  player_count = jnp.maximum(jnp.max(p1s), jnp.max(p2s)) + 1
-  season_count = jnp.max(seasons) + 1
   params = {
     'elos': jnp.zeros([player_count, season_count]),
-    'consistency': jnp.zeros([player_count, season_count]),
+    # 'consistency': jnp.zeros([player_count, season_count]),
   }
   if False:
     # Batch gradient descent algorithm.
@@ -224,6 +227,7 @@ def iglo():
   with open(iglo_json_path, 'r') as f:
     data = json.load(f)
 
+  players = data['players']
   data = {
     'p1s': jnp.array(data['p1s']),
     'p2s': jnp.array(data['p2s']),
@@ -231,16 +235,29 @@ def iglo():
     'seasons': jnp.array(data['seasons']),
   }
 
-
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
-  params, eval = train(data, steps=500, learning_rate=30, do_log=True)
-  results = sorted(zip(params['elos'], data['players'], params['consistency']))
+  params, eval = train(data, steps=1000, learning_rate=30, do_log=True)
+  player_count, season_count = 187, 20
+  assert params['elos'].shape == (player_count, season_count), params['elos'].shape
+
+
+  # results = sorted(zip(params['elos'], players, params['consistency']))
+  # triu = jnp.triu(jnp.ones([season_count, season_count]))
+  # print(params['elos'])
+  # elos = params['elos'] @ triu
+  elos = params['elos']
+  # print(elos)
+  results = sorted(zip(elos[:, -1], players, elos))
   results.reverse()
 
+  for elo, p, elos in results:
+    print(f'{p:30}: ', end='')
+    for s in range(season_count):
+      print(f'{elos[s]: 6.2f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+      # print(f'{elos[s]*100+2000: 6.0f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+    print()
 
-  for elo, p, c in results:
-    print(f'{p:30}: {elo*100+2000: 8.2f}  cons={jnp.exp(c)*100.0: 8.2f}')
   expected_eval = 0.5758981704711914
   print(f'Model fit: {eval} Diff={eval-expected_eval}')
 
