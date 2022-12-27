@@ -41,7 +41,7 @@ def get_data(test=False):
   for season in request(f'seasons'):
     sn = season['number']
     if test:
-      if sn < 16: continue
+      if sn < 18: continue
     for group in request(f'seasons/{sn}/groups'):
       gn = group['name']
       if test:
@@ -83,7 +83,7 @@ def get_data(test=False):
     'p1s': p1s,
     'p2s': p2s,
     'seasons': seasons,
-    'win_types': win_type,
+    'win_types': win_types,
     'groups': groups
   }
 
@@ -91,7 +91,7 @@ def get_data(test=False):
 
 def save_iglo_data(path = '/tmp/iglo.json'):
   with open(path, 'w') as f:
-    json.dump(get_data(), f)
+    json.dump(get_data(False), f)
 
 
 def pow(x):
@@ -256,6 +256,10 @@ def iglo(do_log=True, steps=650, lr=30, path='/tmp/iglo.json'):
   with open(path, 'r') as f:
     data = json.load(f)
 
+  print(data.keys())
+  print(data['win_types'])
+  return
+
   players = data['players']
   data = {
     'p1s': jnp.array(data['p1s']),
@@ -263,7 +267,6 @@ def iglo(do_log=True, steps=650, lr=30, path='/tmp/iglo.json'):
     'p1_win_probs': jnp.array(data['p1_win_probs']),
     'seasons': jnp.array(data['seasons']),
   }
-
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
   params, eval = train(data, steps=steps, learning_rate=lr, do_log=do_log)
