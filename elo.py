@@ -105,11 +105,14 @@ def win_prob(p1_elo, p2_elo):
 # momentum restarting - we can do a mapping between loss component and parameter subspace
 # restart only the subspace when the component increases
 
+diff_method = False
+
 def train(
   data,
   steps,
   do_log=False,
-  learning_rate=30,
+  learning_rate=10000,
+  elo_stability=0.1,
 ):
   p1_win_probs = data['p1_win_probs']
   p2_win_probs = 1.0 - p1_win_probs
@@ -127,7 +130,10 @@ def train(
   assert p1_win_probs.shape == (data_size,)
 
   def model(params):
-    delos = params['elos']
+    if diff_method:
+      delos = params['elo_diff'] @ jnp.triu(jnp.ones([season_count, season_count]))
+    else:
+      delos = params['elos']
     assert delos.shape == (player_count, season_count)
     p1_elos = delos[p1s, seasons]
     p2_elos = delos[p2s, seasons]
@@ -141,7 +147,10 @@ def train(
 
     diff = (p2_elos-p1_elos)
     winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
-    return jnp.mean(winner_win_prob_log)
+    elo_divergence = jnp.mean((delos[:, 1:] - delos[:, :-1])**2)
+    return jnp.mean(winner_win_prob_log) - elo_stability * elo_divergence
+
+    # return jnp.mean(winner_win_prob_log) - 0.01*jnp.mean(delos**2)
     # delos = jnp.mean((elos[:,1:] - elos[:, :-1]) ** 2)
     # return jnp.mean(winner_win_prob_log) - 1.1 * delos
 
@@ -157,35 +166,42 @@ def train(
   # Optimize for these params:
   params = {
     'elos': jnp.zeros([player_count, season_count]),
-    # 'elo_diff': jnp.zeros([player_count, season_count]),
+    'elo_diff': jnp.zeros([player_count, season_count]),
     # 'consistency': jnp.zeros([player_count, season_count]),
   }
-  if False:
-    # Batch gradient descent algorithm.
-    for i in range(steps):
-      eval, grad = jax.value_and_grad(model)(params)
-      if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
-      params = tree_map(lambda p, g: p + learning_rate * g, params, grad)
-  else:
-    # Momentum gradient descent with restarts
-    m_lr = 1.0
-    momentum = tree_map(jnp.zeros_like, params)
-    last_params = params
-    last_eval = -1
-    last_grad = tree_map(jnp.zeros_like, params)
 
-    for i in range(steps):
-      eval, grad = jax.value_and_grad(model)(params)
-      if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
+  # Momentum gradient descent with restarts
+  m_lr = 1.0
+  lr = learning_rate
+  momentum = tree_map(jnp.zeros_like, params)
+  last_params = params
+  last_eval = -1
+  last_grad = tree_map(jnp.zeros_like, params)
+  just_reset = False
+
+  for i in range(steps):
+    eval, grad = jax.value_and_grad(model)(params)
+    if do_log: print(f'Step {i:4}: eval: {pow(eval)}')
+    # lr = learning_rate * (steps-i) / steps
+    # lr = learning_rate / jnp.sqrt(i+1)
+    # lr = learning_rate / (i+1)
+    if False:
+      # Batch gradient descent algorithm.
+      params = tree_map(lambda p, g: p + lr * g, params, grad)
+    else:
       if eval < last_eval:
-        if do_log: print(f'reset to {pow(last_eval)}')
+        if do_log: print(f'reset to {pow(last_eval)} halve_lr={just_reset} {lr}')
+        if just_reset:
+          lr /= 1.9
+        just_reset = True
         momentum = tree_map(jnp.zeros_like, params)
         # momentum /= 2.
         params, eval, grad = last_params, last_eval, last_grad
       else:
+        just_reset = False
         last_params, last_eval, last_grad = params, eval, grad
       momentum = tree_map(lambda m, g: m_lr * m + g, momentum, grad)
-      params = tree_map(lambda p, m: p + learning_rate * m, params, momentum)
+      params = tree_map(lambda p, m: p + lr * m, params, momentum)
       # params['consistency'] = jnp.zeros_like(params['consistency'])
       # params['consistency'] -= jnp.mean(params['consistency'])
       # params['consistency'] /= 2
@@ -193,7 +209,7 @@ def train(
   return params, pow(eval)
 
 
-def test1(do_log=False):
+def test1(do_log=False, steps=30, lr=30):
   true_elos = jnp.array([[8.0, 4.0], [2.0, 3.0], [0.0, 0.0],])
   p1s = []
   p2s = []
@@ -217,16 +233,19 @@ def test1(do_log=False):
     'p1_win_probs': jnp.array(p1_win_probs),
     'seasons': jnp.array(seasons),
   }
-  results, _ = train(test_data, 30, do_log=do_log)
-  # delos = results['elos'] @ jnp.triu([season_count, season_count])
-  delos = results['elos']
+  results, _ = train(test_data, steps=steps, do_log=do_log, learning_rate=lr)
+  if diff_method:
+    delos = results['elo_diff'] @ jnp.triu(jnp.ones([season_count, season_count]))
+  else:
+    delos = results['elos']
   delos = delos - jnp.min(delos, axis=0, keepdims=True)
   err = jnp.linalg.norm(delos - jnp.array(true_elos))
   assert err < 0.02, f'FAIL err={err:.2f}; results={results}'
+
   print('PASS')
 
 
-def iglo():
+def iglo(do_log=True, steps=650, lr=30):
   regularization = 0.1
   with open(iglo_json_path, 'r') as f:
     data = json.load(f)
@@ -241,16 +260,16 @@ def iglo():
 
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
-  params, eval = train(data, steps=250, learning_rate=30, do_log=True)
+  params, eval = train(data, steps=steps, learning_rate=lr, do_log=do_log)
   player_count, season_count = 187, 20
-  delos = params['elos']
+  if diff_method:
+    delos = params['elo_diff'] @ jnp.triu(jnp.ones([season_count, season_count]))
+  else:
+    delos = params['elos']
   assert delos.shape == (player_count, season_count), delos.shape
 
 
   # results = sorted(zip(delos, players, params['consistency']))
-  # triu = jnp.triu(jnp.ones([season_count, season_count]))
-  # print(delos)
-  # elos = delos @ triu
   # print(delos)
   results = sorted(zip(delos[:, -1], players, delos))
   results.reverse()
