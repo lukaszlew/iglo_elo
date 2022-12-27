@@ -30,18 +30,22 @@ def request(s):
   return requests.get(f'{url}/{s}').json()['results']
 
 
-def get_data():
+def get_data(test=False):
   players = []
   p1_win_probs = []
   p1s = []
   p2s = []
   seasons = []
+  win_types = []
+  groups = []
   for season in request(f'seasons'):
     sn = season['number']
-    # if sn < 16: continue
+    if test:
+      if sn < 16: continue
     for group in request(f'seasons/{sn}/groups'):
       gn = group['name']
-      # if group['name'] > 'B': continue
+      if test:
+          if group['name'] > 'B': continue
       id_to_player = {}
       for member in request(f'seasons/{sn}/groups/{gn}/members'):
         mid = member['id']
@@ -71,20 +75,22 @@ def get_data():
             p1s.append(players.index(p1_name))
             p2s.append(players.index(p2_name))
             seasons.append(sn)
+            win_types.append(win_type)
+            groups.append(gn)
   return {
     'players': players,
     'p1_win_probs': p1_win_probs,
     'p1s': p1s,
     'p2s': p2s,
     'seasons': seasons,
+    'win_types': win_type,
+    'groups': groups
   }
 
 
-iglo_json_path = '/tmp/iglo.json'
 
-
-def save_iglo_data():
-  with open(iglo_json_path, 'w') as f:
+def save_iglo_data(path = '/tmp/iglo.json'):
+  with open(path, 'w') as f:
     json.dump(get_data(), f)
 
 
@@ -245,9 +251,9 @@ def test1(do_log=False, steps=30, lr=30):
   print('PASS')
 
 
-def iglo(do_log=True, steps=650, lr=30):
+def iglo(do_log=True, steps=650, lr=30, path='/tmp/iglo.json'):
   regularization = 0.1
-  with open(iglo_json_path, 'r') as f:
+  with open(path, 'r') as f:
     data = json.load(f)
 
   players = data['players']
