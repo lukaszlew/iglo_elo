@@ -127,10 +127,10 @@ def train(
   assert p1_win_probs.shape == (data_size,)
 
   def model(params):
-    elos = params['elos']
-    assert elos.shape == (player_count, season_count)
-    p1_elos = elos[p1s, seasons]
-    p2_elos = elos[p2s, seasons]
+    delos = params['elos']
+    assert delos.shape == (player_count, season_count)
+    p1_elos = delos[p1s, seasons]
+    p2_elos = delos[p2s, seasons]
 
     assert p1_elos.shape == (data_size,)
     assert p2_elos.shape == (data_size,)
@@ -193,21 +193,21 @@ def train(
 
 
 def test1(do_log=False):
-  elos = jnp.array([[8.0, 4.0], [2.0, 3.0], [0.0, 0.0],])
+  true_elos = jnp.array([[8.0, 4.0], [2.0, 3.0], [0.0, 0.0],])
   p1s = []
   p2s = []
   p1_win_probs = []
   seasons = []
-  for p1 in range(len(elos)):
-    for p2 in range(len(elos)):
+  for p1 in range(len(true_elos)):
+    for p2 in range(len(true_elos)):
       for season in range(2):
         p1s.append(p1)
         p2s.append(p2)
-        p1_win_prob = win_prob(elos[p1][season], elos[p2][season])
+        p1_win_prob = win_prob(true_elos[p1][season], true_elos[p2][season])
         p1_win_probs.append(p1_win_prob)
         seasons.append(season)
         # print(p1, p2, p1_win_prob)
-  # players = { pi: f'elo{elos[pi]}' for pi in range(len(elos)) }
+  # players = { pi: f'elo{true_elos[pi]}' for pi in range(len(true_elos)) }
 
   test_data = {
     'p1s': jnp.array(p1s),
@@ -216,8 +216,9 @@ def test1(do_log=False):
     'seasons': jnp.array(seasons),
   }
   results, _ = train(test_data, 30, do_log=do_log)
-  results['elos'] = results['elos'] - jnp.min(results['elos'], axis=0, keepdims=True)
-  err = jnp.linalg.norm(results['elos'] - jnp.array(elos))
+  delos = results['elos']
+  delos = delos - jnp.min(delos, axis=0, keepdims=True)
+  err = jnp.linalg.norm(delos - jnp.array(true_elos))
   assert err < 0.02, f'FAIL err={err:.2f}; results={results}'
   print('PASS')
 
@@ -237,25 +238,25 @@ def iglo():
 
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
-  params, eval = train(data, steps=1000, learning_rate=30, do_log=True)
+  params, eval = train(data, steps=250, learning_rate=30, do_log=True)
   player_count, season_count = 187, 20
-  assert params['elos'].shape == (player_count, season_count), params['elos'].shape
+  delos = params['elos']
+  assert delos.shape == (player_count, season_count), delos.shape
 
 
-  # results = sorted(zip(params['elos'], players, params['consistency']))
+  # results = sorted(zip(delos, players, params['consistency']))
   # triu = jnp.triu(jnp.ones([season_count, season_count]))
-  # print(params['elos'])
-  # elos = params['elos'] @ triu
-  elos = params['elos']
-  # print(elos)
-  results = sorted(zip(elos[:, -1], players, elos))
+  # print(delos)
+  # elos = delos @ triu
+  # print(delos)
+  results = sorted(zip(delos[:, -1], players, delos))
   results.reverse()
 
-  for elo, p, elos in results:
+  for elo, p, delos in results:
     print(f'{p:30}: ', end='')
     for s in range(season_count):
-      print(f'{elos[s]: 6.2f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
-      # print(f'{elos[s]*100+2000: 6.0f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+      print(f'{delos[s]: 6.2f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+      # print(f'{delos[s]*100+2000: 6.0f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
     print()
 
   expected_eval = 0.5758981704711914
