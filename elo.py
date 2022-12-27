@@ -256,9 +256,9 @@ def iglo(do_log=True, steps=650, lr=30, path='/tmp/iglo.json'):
   with open(path, 'r') as f:
     data = json.load(f)
 
-  print(data.keys())
-  print(data['win_types'])
-  return
+  # print(data.keys())
+  # print(set(data['win_types']))
+  # return
 
   players = data['players']
   data = {
