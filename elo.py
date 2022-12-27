@@ -157,6 +157,7 @@ def train(
   # Optimize for these params:
   params = {
     'elos': jnp.zeros([player_count, season_count]),
+    # 'elo_diff': jnp.zeros([player_count, season_count]),
     # 'consistency': jnp.zeros([player_count, season_count]),
   }
   if False:
@@ -198,16 +199,17 @@ def test1(do_log=False):
   p2s = []
   p1_win_probs = []
   seasons = []
-  for p1 in range(len(true_elos)):
-    for p2 in range(len(true_elos)):
-      for season in range(2):
+  player_count, season_count = true_elos.shape
+  for p1 in range(player_count):
+    for p2 in range(player_count):
+      for season in range(season_count):
         p1s.append(p1)
         p2s.append(p2)
         p1_win_prob = win_prob(true_elos[p1][season], true_elos[p2][season])
         p1_win_probs.append(p1_win_prob)
         seasons.append(season)
         # print(p1, p2, p1_win_prob)
-  # players = { pi: f'elo{true_elos[pi]}' for pi in range(len(true_elos)) }
+  # players = { pi: f'elo{true_elos[pi]}' for pi in range(player_count) }
 
   test_data = {
     'p1s': jnp.array(p1s),
@@ -216,6 +218,7 @@ def test1(do_log=False):
     'seasons': jnp.array(seasons),
   }
   results, _ = train(test_data, 30, do_log=do_log)
+  # delos = results['elos'] @ jnp.triu([season_count, season_count])
   delos = results['elos']
   delos = delos - jnp.min(delos, axis=0, keepdims=True)
   err = jnp.linalg.norm(delos - jnp.array(true_elos))
