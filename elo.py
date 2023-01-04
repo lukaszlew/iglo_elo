@@ -1,11 +1,9 @@
 # ToDo:
-# - per season gaussian process
-# - plot
-# - heavy tail fit added
-# - Plan how to present
-#   - present partial first.
-#   - Short writup in markdown
-#   - plot
+# - Readme writup in markdown
+# - dots in the plot
+# - distribution fit to account for heavy tail
+# - accounting for player growth - measure downdrift and make it flat.
+# - accounting for player growth - linear growth coefficient for players
 # Later:
 # - player variance - not clear how it works
 # - rank confidence - not clear what equations
@@ -34,6 +32,12 @@ def log_win_prob(elo, opp_elo):
   return -jnp.log2(1.0 + jnp.exp2(diff))
 
 
+def log_data_probability(p1_elos, p2_elos, p1_win_probs, p2_win_probs):
+  winner_win_prob_log = p1_win_probs * log_win_prob(p1_elos, p2_elos) + p2_win_probs * log_win_prob(p2_elos, p1_elos)
+  mean_log_data_prob = jnp.mean(winner_win_prob_log)
+  return mean_log_data_prob
+
+
 def train(
   data,
   steps,
@@ -57,19 +61,17 @@ def train(
   assert p1_win_probs.shape == (data_size,)
 
   def model(params):
-    delos = params['elos']
-    assert delos.shape == (player_count, season_count)
-    p1_elos = delos[p1s, seasons]
-    p2_elos = delos[p2s, seasons]
+    elos = params['elos']
+    assert elos.shape == (player_count, season_count)
+    p1_elos = elos[p1s, seasons]
+    p2_elos = elos[p2s, seasons]
 
     assert p1_elos.shape == (data_size,)
     assert p2_elos.shape == (data_size,)
-
-    winner_win_prob_log = p1_win_probs * log_win_prob(p1_elos, p2_elos) + p2_win_probs * log_win_prob(p2_elos, p1_elos)
-
-    elo_season_divergence = elo_season_stability * jnp.mean((delos[:, 1:] - delos[:, :-1])**2)
-    mean_log_data_prob = jnp.mean(winner_win_prob_log)
-    return mean_log_data_prob - elo_season_divergence, jnp.exp2(mean_log_data_prob)
+    mean_log_data_prob = log_data_probability(p1_elos, p2_elos, p1_win_probs, p2_win_probs)
+    elo_season_divergence = elo_season_stability * jnp.mean((elos[:, 1:] - elos[:, :-1])**2)
+    geomean_data_prob = jnp.exp2(mean_log_data_prob)
+    return mean_log_data_prob - elo_season_divergence, geomean_data_prob
 
     # TODO: This is an experiment trying to evaluate ELO playing consistency. Try again and delete if does not work.
     # cons = params['consistency']
@@ -149,9 +151,9 @@ def train_test(do_log=False, steps=60, lr=30):
     'seasons': jnp.array(seasons),
   }
   results, _ = train(test_data, steps=steps, do_log=do_log, learning_rate=lr, elo_season_stability=0.0)
-  delos = results['elos']
-  delos = delos - jnp.min(delos, axis=0, keepdims=True)
-  err = jnp.linalg.norm(delos - jnp.array(true_elos))
+  elos = results['elos']
+  elos = elos - jnp.min(elos, axis=0, keepdims=True)
+  err = jnp.linalg.norm(elos - jnp.array(true_elos))
   assert err < 0.02, f'FAIL err={err:.2f}; results={results}'
 
   print('PASS')
@@ -186,23 +188,24 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
   params, model_fit = train(data, steps=steps, learning_rate=lr, do_log=do_log)
-  delos = params['elos']
-  assert delos.shape == (player_count, season_count), delos.shape
+  elos = params['elos']
+  assert elos.shape == (player_count, season_count), elos.shape
 
   # Sort by last season's elo
-  results = sorted(zip(delos[:, -1], players, delos, first_season, last_season))
+  results = sorted(zip(elos[:, -1], players, elos, first_season, last_season))
   results.reverse()
 
-  for _, p, delos, first_season, last_season in results:
-    delos = delos * 100 + 2000
+  for _, p, elos, first_season, last_season in results:
+    elos = elos * 100 + 2000
     print(f'{p:18} ({first_season:2}-{last_season:2}): ', end='')
     for s in range(season_count):
-      print(f'{delos[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+      print(f'{elos[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
     print()
 
   # expected_fit = 0.5758981704711914
   # expected_fit = 0.6161791524954028
-  expected_fit = 0.6304865302054197  # without cross-season loss
+  # expected_fit = 0.6304865302054197  # without cross-season loss
+  expected_fit = 0.6304865296890099
   print(f'Model fit: {model_fit} improvement={model_fit-expected_fit}')
   return results
 
@@ -210,9 +213,7 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
 def show_plot(r):
   for _, pl, elo, first_season, last_season in r[:]:
     seasons = list(range(first_season, last_season+1))
-    print(seasons)
     elo = elo[first_season:last_season+1]
-    # print(list(seasons))
     plt.plot(seasons, elo*100+2000, label=pl)
   plt.legend()
   plt.show()
