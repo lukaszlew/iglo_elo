@@ -1,13 +1,3 @@
-# ToDo:
-# - Readme writup in markdown
-# - dots in the plot
-# - distribution fit to account for heavy tail
-# - accounting for player growth - measure downdrift and make it flat.
-# - accounting for player growth - linear growth coefficient for players
-# Later:
-# - player variance - not clear how it works
-# - rank confidence - not clear what equations
-
 import jax.numpy as jnp
 import jax
 from jax.tree_util import tree_map
@@ -191,15 +181,23 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   elos = params['elos']
   assert elos.shape == (player_count, season_count), elos.shape
 
-  # Sort by last season's elo
-  results = sorted(zip(elos[:, -1], players, elos, first_season, last_season))
-  results.reverse()
 
-  for _, p, elos, first_season, last_season in results:
-    elos = elos * 100 + 2000
-    print(f'{p:18} ({first_season:2}-{last_season:2}): ', end='')
+  # Sort by last season's elo
+  order = jnp.flip(elos[:, -1].argsort())
+
+  players = np.array(players)[order]
+  elos = elos[order]
+  first_season = jnp.array(first_season)[order]
+  last_season = jnp.array(last_season)[order]
+
+  for i in range(len(players)):
+    p = players[i]
+    e = elos[i] * 100 + 2000
+    fs = first_season[i]
+    ls = last_season[i]
+    print(f'{p:18} ({fs:2}-{ls:2}): ', end='')
     for s in range(season_count):
-      print(f'{elos[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+      print(f'{e[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
     print()
 
   # expected_fit = 0.5758981704711914
@@ -207,19 +205,35 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   # expected_fit = 0.6304865302054197  # without cross-season loss
   expected_fit = 0.6304865296890099
   print(f'Model fit: {model_fit} improvement={model_fit-expected_fit}')
-  return results
+  # This is the format of JSON export.
+  # All lists are of the same length equal to the number of players.
+  return {
+    'players': players.tolist(),
+    # elos is a list of lists. For each player, we have ELO strength for a given season.
+    'elos': elos.tolist(),
+    'first_season': first_season.tolist(),
+    'last_season': last_season.tolist(),
+  }
 
 
 def show_plot(r):
-  for _, pl, elo, first_season, last_season in r[:]:
-    seasons = list(range(first_season, last_season+1))
-    elo = elo[first_season:last_season+1]
+  for i in range(0, 10):
+    pl = r['players'][i]
+    elo = r['elos'][i]
+    fs = r['first_season'][i]
+    ls = r['last_season'][i]
+    seasons = list(range(fs, ls+1))
+    elo = np.array(elo[fs:ls+1])
     plt.plot(seasons, elo*100+2000, label=pl)
   plt.legend()
   plt.show()
 
 
-def train_show(last_pl=None, first_pl=None, steps=None):
+def train_show(last_pl=None, steps=None):
   train_test()
   r = train_iglo(steps=steps)
-  show_plot(r[first_pl:last_pl])
+
+  with open('./iglo_elo.json', 'w') as f:
+    json.dump(r, f)
+
+  show_plot(r)
