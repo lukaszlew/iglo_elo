@@ -157,14 +157,26 @@ def train_test(do_log=False, steps=60, lr=30):
   print('PASS')
 
 
-def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json'):
-  regularization = 0.1
+def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularization = 0.1):
   with open(path, 'r') as f:
     data = json.load(f)
+
 
   selector = np.array(data['win_types']) != 'not_played'
 
   players = data['players']
+  player_count = len(players)
+  season_count = 20
+
+  first_season = [99999999] * player_count
+  last_season = [-1] * player_count
+
+  for p1, p2, s in zip(data['p1s'], data['p2s'], data['seasons']):
+    first_season[p1] = min(first_season[p1], s)
+    first_season[p2] = min(first_season[p2], s)
+    last_season[p1] = max(last_season[p1], s)
+    last_season[p2] = max(last_season[p2], s)
+
   data = {
     'p1s': jnp.array(data['p1s'])[selector],
     'p2s': jnp.array(data['p2s'])[selector],
@@ -174,17 +186,16 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json'):
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
   params, model_fit = train(data, steps=steps, learning_rate=lr, do_log=do_log)
-  player_count, season_count = 187, 20
   delos = params['elos']
   assert delos.shape == (player_count, season_count), delos.shape
 
   # Sort by last season's elo
-  results = sorted(zip(delos[:, -1], players, delos))
+  results = sorted(zip(delos[:, -1], players, delos, first_season, last_season))
   results.reverse()
 
-  for _, p, delos in results:
+  for _, p, delos, first_season, last_season in results:
     delos = delos * 100 + 2000
-    print(f'{p:18}: ', end='')
+    print(f'{p:18} ({first_season:2}-{last_season:2}): ', end='')
     for s in range(season_count):
       print(f'{delos[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
     print()
@@ -197,8 +208,12 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json'):
 
 
 def show_plot(r):
-  for _, pl, elo in r[:]:
-    plt.plot(range(20), elo*100+2000, label=pl)
+  for _, pl, elo, first_season, last_season in r[:]:
+    seasons = list(range(first_season, last_season+1))
+    print(seasons)
+    elo = elo[first_season:last_season+1]
+    # print(list(seasons))
+    plt.plot(seasons, elo*100+2000, label=pl)
   plt.legend()
   plt.show()
 
