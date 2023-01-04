@@ -15,25 +15,31 @@ import jax
 from jax.tree_util import tree_map
 import json
 import numpy as np
+import matplotlib.pyplot as plt
 
 from jax.config import config
-config.update("jax_numpy_rank_promotion", "raise")
-config.update("jax_enable_x64", True)
+config.update("jax_numpy_rank_promotion", "raise")  # bug prevention
+config.update("jax_enable_x64", True)  # better model accuracy
 
 
-
-
-def win_prob(p1_elo, p2_elo):
-  return 1.0 / (1.0 + jnp.exp2(p2_elo-p1_elo))
+def win_prob(elo, opp_elo):
+  return 1.0 / (1.0 + jnp.exp2(opp_elo-elo))
   # This is more understandable and equivalent:
-  # return jnp.exp2(p1_elo) / (jnp.exp2(p1_elo) + jnp.exp2(p2_elo))
+  # return jnp.exp2(elo) / (jnp.exp2(elo) + jnp.exp2(opp_elo))
+
+
+def log_win_prob(elo, opp_elo):
+  # return jnp.log2(win_prob(elo, opp_elo))
+  diff = opp_elo - elo
+  return -jnp.log2(1.0 + jnp.exp2(diff))
+
 
 def train(
   data,
   steps,
   do_log=False,
   learning_rate=10000,
-  elo_stability=0.5,
+  elo_season_stability=0.5,
 ):
   p1_win_probs = data['p1_win_probs']
   p2_win_probs = 1.0 - p1_win_probs
@@ -59,28 +65,19 @@ def train(
     assert p1_elos.shape == (data_size,)
     assert p2_elos.shape == (data_size,)
 
-    # p1_win_prob_log = jnp.log2(win_prob(p1_elos, p2_elos))
-    # p2_win_prob_log = jnp.log2(win_prob(p2_elos, p1_elos))
-    # winner_win_prob_log = p1_win_probs * p1_win_prob_log + p2_win_probs * p2_win_prob_log
+    winner_win_prob_log = p1_win_probs * log_win_prob(p1_elos, p2_elos) + p2_win_probs * log_win_prob(p2_elos, p1_elos)
 
-    diff = (p2_elos-p1_elos)
-    def log1pow(x):
-      return -jnp.log2(1.0 + jnp.exp2(x))
-    winner_win_prob_log = p1_win_probs * log1pow(diff) + p2_win_probs * log1pow(-diff)
-    elo_divergence = jnp.mean((delos[:, 1:] - delos[:, :-1])**2)
-    eval = jnp.mean(winner_win_prob_log)
-    return eval - elo_stability * elo_divergence, eval
+    elo_season_divergence = elo_season_stability * jnp.mean((delos[:, 1:] - delos[:, :-1])**2)
+    mean_log_data_prob = jnp.mean(winner_win_prob_log)
+    return mean_log_data_prob - elo_season_divergence, jnp.exp2(mean_log_data_prob)
 
-    # return jnp.mean(winner_win_prob_log) - 0.01*jnp.mean(delos**2)
-    # delos = jnp.mean((elos[:,1:] - elos[:, :-1]) ** 2)
-    # return jnp.mean(winner_win_prob_log) - 1.1 * delos
-
+    # TODO: This is an experiment trying to evaluate ELO playing consistency. Try again and delete if does not work.
     # cons = params['consistency']
     # p1_cons = jnp.take(cons, p1s)
     # p2_cons = jnp.take(cons, p2s)
     # winner_win_prob_log = 0.0
-    # winner_win_prob_log += p1_win_probs * log1pow(diff/jnp.exp(p1_cons)) + p2_win_probs * log1pow(-diff/jnp.exp(p1_cons))
-    # winner_win_prob_log += p1_win_probs * log1pow(diff/jnp.exp(p2_cons)) + p2_win_probs * log1pow(-diff/jnp.exp(p2_cons))
+    # winner_win_prob_log += p1_win_probs * log_win_prob_diff(diff/jnp.exp(p1_cons)) + p2_win_probs * log_win_prob_diff(-diff/jnp.exp(p1_cons))
+    # winner_win_prob_log += p1_win_probs * log_win_prob_diff(diff/jnp.exp(p2_cons)) + p2_win_probs * log_win_prob_diff(-diff/jnp.exp(p2_cons))
     # winner_win_prob_log /= 2
     # return jnp.mean(winner_win_prob_log) - 0.005*jnp.mean(cons ** 2)
 
@@ -99,19 +96,16 @@ def train(
   last_grad = tree_map(jnp.zeros_like, params)
   last_reset_step = 0
 
-  print(params['elos'].dtype)
-  for i in range(steps):
-    (eval, eval1), grad = jax.value_and_grad(model,has_aux=True)(params)
+  for i in range(steps or 9999):
+    (eval, model_fit), grad = jax.value_and_grad(model,has_aux=True)(params)
     if do_log:
       elos = grad['elos']
-      q=jnp.sum(params['elos'] == last_params['elos'])
+      q=jnp.sum(params['elos'] == last_params['elos']) / params['elos'].size
+      if i > 100 and q > 0.9:
+        break
       print(f'Step {i:4}: eval: {jnp.exp2(eval)} lr={lr:7} grad={jnp.linalg.norm(elos)} {q}')
-      # print(eval - last_eval)
-    # lr = learning_rate * (steps-i) / steps
-    # lr = learning_rate / jnp.sqrt(i+1)
-    # lr = learning_rate / (i+1)
     if False:
-      # Batch gradient descent algorithm.
+      # Standard batch gradient descent algorithm works too.
       params = tree_map(lambda p, g: p + lr * g, params, grad)
     else:
       if eval < last_eval:
@@ -129,14 +123,10 @@ def train(
         last_params, last_eval, last_grad = params, eval, grad
       momentum = tree_map(lambda m, g: m_lr * m + g, momentum, grad)
       params = tree_map(lambda p, m: p + lr * m, params, momentum)
-      # params['consistency'] = jnp.zeros_like(params['consistency'])
-      # params['consistency'] -= jnp.mean(params['consistency'])
-      # params['consistency'] /= 2
-      # params['consistency'] = jnp.ones_like(params['consistency'])
-  return params, jnp.exp2(eval1)
+  return params, model_fit
 
 
-def test1(do_log=False, steps=30, lr=30):
+def train_test(do_log=False, steps=60, lr=30):
   true_elos = jnp.array([[8.0, 4.0], [2.0, 3.0], [0.0, 0.0],])
   p1s = []
   p2s = []
@@ -151,8 +141,6 @@ def test1(do_log=False, steps=30, lr=30):
         p1_win_prob = win_prob(true_elos[p1][season], true_elos[p2][season])
         p1_win_probs.append(p1_win_prob)
         seasons.append(season)
-        # print(p1, p2, p1_win_prob)
-  # players = { pi: f'elo{true_elos[pi]}' for pi in range(player_count) }
 
   test_data = {
     'p1s': jnp.array(p1s),
@@ -160,7 +148,7 @@ def test1(do_log=False, steps=30, lr=30):
     'p1_win_probs': jnp.array(p1_win_probs),
     'seasons': jnp.array(seasons),
   }
-  results, _ = train(test_data, steps=steps, do_log=do_log, learning_rate=lr)
+  results, _ = train(test_data, steps=steps, do_log=do_log, learning_rate=lr, elo_season_stability=0.0)
   delos = results['elos']
   delos = delos - jnp.min(delos, axis=0, keepdims=True)
   err = jnp.linalg.norm(delos - jnp.array(true_elos))
@@ -169,14 +157,10 @@ def test1(do_log=False, steps=30, lr=30):
   print('PASS')
 
 
-def iglo(do_log=True, steps=650, lr=30, path='./iglo.json'):
+def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json'):
   regularization = 0.1
   with open(path, 'r') as f:
     data = json.load(f)
-
-  # print(data.keys())
-  # print(set(data['win_types']))
-  # return
 
   selector = np.array(data['win_types']) != 'not_played'
 
@@ -189,36 +173,37 @@ def iglo(do_log=True, steps=650, lr=30, path='./iglo.json'):
   }
   data['p1_win_probs'] = (1-regularization) * data['p1_win_probs'] + regularization * 0.5
 
-  params, eval = train(data, steps=steps, learning_rate=lr, do_log=do_log)
+  params, model_fit = train(data, steps=steps, learning_rate=lr, do_log=do_log)
   player_count, season_count = 187, 20
   delos = params['elos']
   assert delos.shape == (player_count, season_count), delos.shape
 
-
-  # results = sorted(zip(delos, players, params['consistency']))
-  # print(delos)
+  # Sort by last season's elo
   results = sorted(zip(delos[:, -1], players, delos))
   results.reverse()
 
-  for elo, p, delos in results:
-    print(f'{p:30}: ', end='')
+  for _, p, delos in results:
+    delos = delos * 100 + 2000
+    print(f'{p:18}: ', end='')
     for s in range(season_count):
-      print(f'{delos[s]: 6.2f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
-      # print(f'{delos[s]*100+2000: 6.0f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
+      print(f'{delos[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
     print()
 
-  # expected_eval = 0.5758981704711914
-  expected_eval = 0.6161791524954028
-  print(f'Model fit: {eval} improvement={eval-expected_eval}')
+  # expected_fit = 0.5758981704711914
+  # expected_fit = 0.6161791524954028
+  expected_fit = 0.6304865302054197  # without cross-season loss
+  print(f'Model fit: {model_fit} improvement={model_fit-expected_fit}')
   return results
 
-import matplotlib.pyplot as plt
 
-def p(r):
+def show_plot(r):
   for _, pl, elo in r[:]:
     plt.plot(range(20), elo*100+2000, label=pl)
   plt.legend()
   plt.show()
 
-def main():
-  test_train()
+
+def train_show(last_pl=None, first_pl=None, steps=None):
+  train_test()
+  r = train_iglo(steps=steps)
+  show_plot(r[first_pl:last_pl])
