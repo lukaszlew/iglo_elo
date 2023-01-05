@@ -149,7 +149,7 @@ def train_test(do_log=False, steps=60, lr=30):
   print('PASS')
 
 
-def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularization = 0.1):
+def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularization = 0.1, save_json=False):
   with open(path, 'r') as f:
     data = json.load(f)
 
@@ -207,33 +207,50 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   print(f'Model fit: {model_fit} improvement={model_fit-expected_fit}')
   # This is the format of JSON export.
   # All lists are of the same length equal to the number of players.
-  return {
+  result = {
     'players': players.tolist(),
     # elos is a list of lists. For each player, we have ELO strength for a given season.
     'elos': elos.tolist(),
     'first_season': first_season.tolist(),
     'last_season': last_season.tolist(),
   }
+  if save_json:
+    with open('./iglo_elo.json', 'w') as f:
+      json.dump(result, f)
+  return result
 
 
-def show_plot(r):
-  for i in range(0, 10):
-    pl = r['players'][i]
-    elo = r['elos'][i]
-    fs = r['first_season'][i]
-    ls = r['last_season'][i]
+def show_plot(iglo_elo, pl_count, first_pl=0):
+  pl_count = pl_count or len(iglo_elo['players'])
+  for i in range(first_pl, first_pl+pl_count):
+    pl = iglo_elo['players'][i]
+    elo = iglo_elo['elos'][i]
+    fs = iglo_elo['first_season'][i]
+    ls = iglo_elo['last_season'][i]
     seasons = list(range(fs, ls+1))
     elo = np.array(elo[fs:ls+1])
-    plt.plot(seasons, elo*100+2000, label=pl)
+    plt.plot(seasons, elo*100+2000, label=pl, marker='.')
   plt.legend()
   plt.show()
 
 
-def train_show(last_pl=None, steps=None):
-  train_test()
-  r = train_iglo(steps=steps)
+def read_iglo_elo():
+  with open('./iglo_elo.json', 'r') as f:
+    return json.load(f)
 
-  with open('./iglo_elo.json', 'w') as f:
-    json.dump(r, f)
+def train_show(pl_count=None, first_pl=0):
+  # train_test()
+  # iglo_elo = train_iglo(steps=steps)
+  iglo_elo = read_iglo_elo()
+  show_plot(iglo_elo, pl_count=pl_count, first_pl=first_pl)
 
-  show_plot(r)
+
+def show_elo_evolution_histogram(bins=100):
+  elos = np.array(read_iglo_elo()['elos'])
+  elo_deltas = elos[:, 1:] - elos[:, :-1]
+  elo_deltas = elo_deltas.reshape(elo_deltas.size)
+  elo_deltas = elo_deltas[np.abs(elo_deltas) > 0.00001]
+  # elo_deltas = elo_deltas[np.abs(elo_deltas) < 0.2]
+  # print(jnp.mean(elo_deltas))
+  plt.hist(elo_deltas, bins=bins)
+  plt.show()

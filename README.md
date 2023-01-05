@@ -8,11 +8,26 @@ This repo implements:
 - Some simple plots.
 - JSON export (look for comments in the code).
 
+## Model details
+
+The model finds a single number (ELO strength) for each player.
+Given ELO of two players, the model predicts probability of win in a game:
+If we assume that $P$ and $Q$ are rankings of two players, the model assumes:
+
+$$P(P wins vs Q) = \frac{2^P}{2^P + 2^Q}$$
+
+This means that if both rankings are equal to $a$, then: $P(win) = \frac{2^a}{2^a+2^a} = 0.5$.
+If a ranking difference is one point, we have $P(win) = \frac{2^{a+1}}{2^{a+1}+2^{a}} = \frac{2}{2+1}$
+Two point adventage yields $P(win) = \frac{1}{5}$
+$n$ point adventage yields $P(win) = \frac{1}{1+2^n}$
+
+Chess ELO is using $10^0.25 \approx 1.77$ instead of 2 as the basis of the exponent, but I thought round numbers $1/3, 1/5, 1/9$ will be easier to remember.
+
+Both chess ELO and Iglo ELO rescales 1 point to 100.
+
 ## ToDo
 
-- dots in the plot
 - distribution fit to account for heavy tail
-- accounting for player growth - measure downdrift and make it flat.
 - accounting for player growth - linear growth coefficient for players
 
 ### Ideas
