@@ -90,6 +90,7 @@ def train(
 
   for i in range(steps or 9999):
     (eval, model_fit), grad = jax.value_and_grad(model,has_aux=True)(params)
+
     if do_log:
       elos = grad['elos']
       q=jnp.sum(params['elos'] == last_params['elos']) / params['elos'].size
@@ -220,7 +221,8 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   return result
 
 
-def show_plot(iglo_elo, pl_count, first_pl=0):
+def show_plot(pl_count, first_pl=0, save_svg=None):
+  iglo_elo = read_iglo_elo()
   pl_count = pl_count or len(iglo_elo['players'])
   for i in range(first_pl, first_pl+pl_count):
     pl = iglo_elo['players'][i]
@@ -231,18 +233,15 @@ def show_plot(iglo_elo, pl_count, first_pl=0):
     elo = np.array(elo[fs:ls+1])
     plt.plot(seasons, elo*100+2000, label=pl, marker='.')
   plt.legend()
-  plt.show()
+  if save_svg is not None:
+    plt.savefig(save_svg)
+  else:
+    plt.show()
 
 
 def read_iglo_elo():
   with open('./iglo_elo.json', 'r') as f:
     return json.load(f)
-
-def train_show(pl_count=None, first_pl=0):
-  # train_test()
-  # iglo_elo = train_iglo(steps=steps)
-  iglo_elo = read_iglo_elo()
-  show_plot(iglo_elo, pl_count=pl_count, first_pl=first_pl)
 
 
 def show_elo_evolution_histogram(bins=100):
