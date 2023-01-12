@@ -191,15 +191,6 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   first_season = jnp.array(first_season)[order]
   last_season = jnp.array(last_season)[order]
 
-  for i in range(len(players)):
-    p = players[i]
-    e = elos[i] * 100 + 2000
-    fs = first_season[i]
-    ls = last_season[i]
-    print(f'{p:18} ({fs:2}-{ls:2}): ', end='')
-    for s in range(season_count):
-      print(f'{e[s]: 6.1f} ', end='') #  cons={jnp.exp(c)*100.0: 8.2f}')
-    print()
 
   # expected_fit = 0.5758981704711914
   # expected_fit = 0.6161791524954028
@@ -221,10 +212,12 @@ def train_iglo(do_log=True, steps=None, lr=30, path='./iglo.json', regularizatio
   return result
 
 
-def show_plot(pl_count, first_pl=0, save_svg=None):
+def show_plot(pl_count, first_pl=0, savefig=None):
   iglo_elo = read_iglo_elo()
-  pl_count = pl_count or len(iglo_elo['players'])
+  pl_count = pl_count or (len(iglo_elo['players'])-first_pl)
+  had_one=False
   for i in range(first_pl, first_pl+pl_count):
+    had_one=True
     pl = iglo_elo['players'][i]
     elo = iglo_elo['elos'][i]
     fs = iglo_elo['first_season'][i]
@@ -232,11 +225,46 @@ def show_plot(pl_count, first_pl=0, save_svg=None):
     seasons = list(range(fs, ls+1))
     elo = np.array(elo[fs:ls+1])
     plt.plot(seasons, elo*100+2000, label=pl, marker='.')
+  if not had_one:
+    return
   plt.legend()
-  if save_svg is not None:
-    plt.savefig(save_svg)
+  if savefig is not None:
+    plt.savefig(savefig)
   else:
     plt.show()
+
+
+def show_table(savetxt=None):
+  result = ''
+  iglo_elo = read_iglo_elo()
+
+  for i in range(len(iglo_elo['players'])):
+    p = iglo_elo['players'][i]
+    e = iglo_elo['elos'][i]
+    fs = iglo_elo['first_season'][i]
+    ls = iglo_elo['last_season'][i]
+    result += f'{p:18} ({fs:2}-{ls:2}): '
+    for season, ee in enumerate(e):
+      if season == 0: continue # there was no season 0
+      if season >= fs and season <= ls:
+        result += f'{ee* 100 + 2000: 7.1f} '
+        #  cons={jnp.exp(c)*100.0: 8.2f}'
+      else:
+        result += f'  ...   '
+    result += '\n'
+  if savetxt:
+    with open(savetxt, 'w') as f:
+      f.write(result)
+  else:
+    print(result)
+
+
+def save_all():
+  for i in range(100):
+    first_pl=i*5
+    count = 10
+    last_pl=first_pl+count
+    show_plot(count, first_pl=first_pl, savefig=f'elo-{first_pl+1}-to-{last_pl}.svg')
 
 
 def read_iglo_elo():
