@@ -34,7 +34,7 @@ The model finds a single number (ELO strength) for each player.
 Given ELO of two players, the model predicts probability of win in a game:
 If we assume that $P$ and $Q$ are rankings of two players, the model assumes:
 
-$$P(P wins vs Q) = \frac{2^P}{2^P + 2^Q} = \frac{1}{1 + 2^{Q-P}} $$
+$$P(\text{P vs Q win}) = \frac{2^P}{2^P + 2^Q} = \frac{1}{1 + 2^{Q-P}} $$
 
 This means that if both rankings are equal to $a$, then: $P(win) = \frac{2^a}{2^a+2^a} = 0.5$.
 If a ranking difference is one point, we have $P(win) = \frac{2^{a+1}}{2^{a+1}+2^{a}} = \frac{2}{2+1}$
@@ -42,6 +42,7 @@ Two point adventage yields $P(win) = \frac{1}{5}$
 $n$ point adventage yields $P(win) = \frac{1}{1+2^n}$
 
 For readability reasons we rescale the points by 100. This is exactly equivalent to using this equation:
+
 $$ \frac{1}{1 + 2^{\frac{Q-P}{100}}} $$
 
 
@@ -58,8 +59,9 @@ for much more efficient data use.
 
 EGD is trying to match 100 points to one 'dan/kyu' rank, instead of fixed probability of win (such as 1/3 for 100 points here).
 And probability gap is [higher at higher level](https://www.europeangodatabase.eu/EGD/winning_stats.php), e.g.:
-$$P(win 3dan vs 5dan) \approx 16% $$ (1:5 odds)
-$$P(win 15kyu vs 13kyu) \approx 33% $$ (1:2 odds)
+
+- $$P(\text{3dan vs 5dan win}) \approx 16%$$ (1:5 odds)
+- $$P(\text{15kyu vs 13kyu win}) \approx 33%$$ (1:2 odds)
 
 EGD implements this by varying the exponent base for different ratings.
 
