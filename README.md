@@ -12,9 +12,9 @@ This repo implements:
 
 Model output is in [iglo_elo_table.txt](https://raw.githubusercontent.com/lukaszlew/iglo_elo/main/iglo_elo_table.txt)
 
-100 point difference is 1:2 win odds  (33% vs 66%)
-200 point difference is 1:5 win odds  (20% vs 80%)
-300 point difference is 1:10 win odds  (10% vs 90%)
+100 point difference is 1:2 win odds  (33% vs 66%)  
+200 point difference is 1:5 win odds  (20% vs 80%)  
+300 point difference is 1:10 win odds  (10% vs 90%)  
 
 ## Model details
 
