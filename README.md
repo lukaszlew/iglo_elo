@@ -1,13 +1,5 @@
 # IGLO ELO ranking
 
-This repo implements:
-
-- Harvesting game results data from IGLO API.
-- Implement [Bradley-Terry (BT) model](https://en.wikipedia.org/wiki/Bradley%E2%80%93Terry_model) for player ranking (better variant of ELO).
-- Generalization BT model to a variant of [WHR model](https://www.remi-coulom.fr/WHR/) with time as seasons.
-- Some simple plots.
-- JSON export (look for comments in the code).
-
 ## Ratings
 
 Model output is in [iglo_elo_table.txt](https://raw.githubusercontent.com/lukaszlew/iglo_elo/main/iglo_elo_table.txt)
@@ -64,6 +56,17 @@ And probability gap is [higher at higher level](https://www.europeangodatabase.e
 - $$P(\text{15kyu vs 13kyu win}) \approx 33%$$ (1:2 odds)
 
 EGD implements this by varying the exponent base for different ratings.
+
+## What's implemented
+
+This repo implements:
+
+- Harvesting game results data from IGLO API.
+- Implement [Bradley-Terry (BT) model](https://en.wikipedia.org/wiki/Bradley%E2%80%93Terry_model) for player ranking (better variant of ELO).
+- Generalization BT model to a variant of [WHR model](https://www.remi-coulom.fr/WHR/) with time as seasons.
+- Some simple plots.
+- JSON export (look for comments in the code).
+
 
 ## ToDo
 
