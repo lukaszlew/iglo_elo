@@ -1,4 +1,4 @@
-# IGLO ELO ranking
+# [IGLO](https://iglo.szalenisamuraje.org/) ELO ranking
 
 ## Ratings
 
