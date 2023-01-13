@@ -25,8 +25,8 @@ It can be compared to hidden MMR used for match-making in games like Starcraft 2
 ## If it so accurate why other systems are not using it?
 
 Typical ELO systems (like EGD) use every game result only once and update rating based on it.
-This model did 1500 passes over the data until it converged (and the first pass would be more or less like EGD).
-So many passes is too expensive when the number of games is as big as EGD.
+This model did 1500 passes over the data until it converged (the first pass returns numbers more or less like standard ELO system, equations are almost the same).
+However so many passes is too expensive when the number of games is as big as EGD.
 
 ## Model details
 
