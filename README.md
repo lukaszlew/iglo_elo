@@ -45,6 +45,16 @@ For readability reasons we rescale the points by 100. This is exactly equivalent
 
 $$ \frac{1}{1 + 2^{\frac{Q-P}{100}}} $$
 
+## Comparison to single-pass systems.
+
+In single pass systems, if you play a game, it will not affect the model estimation of your rating yesterday.
+In multi-pass system we can estimate every player's rating for every season (or even every day).
+Then iteratively pass over the data again and again until we find rating curves that best fit the data.
+
+There is a parameter that controlls how fast the rating can change. 
+WHR model assumes that player rating is a gaussian process in time, and this parameter is variance of this gaussian process.
+
+The consequence is that data flows both time directions: if you play game in season 20, it will also affect your ratings for season 19 (a bit) and season 18 (very small bit) etc.
 
 ## Comparison to chess ELO
 
