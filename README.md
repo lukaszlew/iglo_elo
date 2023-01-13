@@ -10,6 +10,8 @@ Model output is in [iglo_elo_table.txt](https://raw.githubusercontent.com/lukasz
 200 point difference is 1:5 win odds  (20% vs 80%)  
 300 point difference is 1:10 win odds  (10% vs 90%)  
 
+This is different that EGD, where 100 points of rating is not fixed winning ods!
+
 ## What it is good for?
 
 To see how well did you do in IGLO. Taking into account how well did your opponents did.
