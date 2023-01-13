@@ -8,6 +8,14 @@ This repo implements:
 - Some simple plots.
 - JSON export (look for comments in the code).
 
+## Ratings
+
+Model output is in [iglo_elo_table.txt](https://raw.githubusercontent.com/lukaszlew/iglo_elo/main/iglo_elo_table.txt)
+
+100 point difference is 1:2 win odds  (33% vs 66%)
+200 point difference is 1:5 win odds  (20% vs 80%)
+300 point difference is 1:10 win odds  (10% vs 90%)
+
 ## Model details
 
 The model finds a single number (ELO strength) for each player.
