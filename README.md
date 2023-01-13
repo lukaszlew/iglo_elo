@@ -75,6 +75,15 @@ And probability gap is [higher at higher level](https://www.europeangodatabase.e
 
 EGD implements this by varying the exponent base for different ratings.
 
+## Can I convert these ratings to EGD?
+
+Because EGD is using different exponent base, it is not that easy to convert directly.
+These must be a monotonic conversion function but it is non-linear, and I don't know how to derive the formula.
+
+The best you can do is compare win probabilities (this is universal unit as opposed to dan/kyu system).
+
+The code could be updated to use the same dynamic exponent base as EGD and re-run to converge again to ratings that are comparable to EGD, but it takes some amount of programming and experimenting.
+
 ## What's implemented
 
 This repo implements:
