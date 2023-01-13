@@ -1,5 +1,7 @@
 # [IGLO](https://iglo.szalenisamuraje.org/) ELO ranking
 
+This implementation of a very multi-pass accurate rating model for IGLO.
+
 ## Ratings
 
 Model output is in [iglo_elo_table.txt](https://raw.githubusercontent.com/lukaszlew/iglo_elo/main/iglo_elo_table.txt)
@@ -19,6 +21,12 @@ It is useful to find opponents of with similar track record in IGLO.
 Player motivation. 
 This system does not have any gamification incentives. It uses data efficiently and converges rather quickly.
 It can be compared to hidden MMR used for match-making in games like Starcraft 2, not to the player-visible motivating points with many bonuses.
+
+## If it so accurate why other systems are not using it?
+
+Typical ELO systems (like EGD) use every game result only once and update rating based on it.
+This model did 1500 passes over the data until it converged (and the first pass would be more or less like EGD).
+So many passes is too expensive when the number of games is as big as EGD.
 
 ## Model details
 
